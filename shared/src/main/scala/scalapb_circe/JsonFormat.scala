@@ -23,22 +23,18 @@ case class FormatRegistry(
   enumFormatters: Map[EnumDescriptor, Formatter[EnumValueDescriptor]] = Map.empty,
   registeredCompanions: Seq[GenericCompanion] = Seq.empty) {
 
-  def registerMessageFormatter[T <: GeneratedMessage](
-    writer: (Printer, T) => Json,
-    parser: (Parser, Json) => T)(implicit ct: ClassTag[T]): FormatRegistry = {
+  def registerMessageFormatter[T <: GeneratedMessage](writer: (Printer, T) => Json, parser: (Parser, Json) => T)(
+    implicit ct: ClassTag[T]): FormatRegistry = {
     copy(messageFormatters = messageFormatters + (ct.runtimeClass -> Formatter(writer, parser)))
   }
 
   def registerEnumFormatter[E <: GeneratedEnum](
     writer: (Printer, EnumValueDescriptor) => Json,
-    parser: (Parser, Json) => EnumValueDescriptor)(
-    implicit cmp: GeneratedEnumCompanion[E]): FormatRegistry = {
+    parser: (Parser, Json) => EnumValueDescriptor)(implicit cmp: GeneratedEnumCompanion[E]): FormatRegistry = {
     copy(enumFormatters = enumFormatters + (cmp.scalaDescriptor -> Formatter(writer, parser)))
   }
 
-  def registerWriter[T <: GeneratedMessage: ClassTag](
-    writer: T => Json,
-    parser: Json => T): FormatRegistry = {
+  def registerWriter[T <: GeneratedMessage: ClassTag](writer: T => Json, parser: Json => T): FormatRegistry = {
     registerMessageFormatter((p: Printer, t: T) => writer(t), (p: Parser, v: Json) => parser(v))
   }
 
@@ -50,13 +46,11 @@ case class FormatRegistry(
     messageFormatters.get(klass).asInstanceOf[Option[Formatter[T]]].map(_.parser)
   }
 
-  def getEnumWriter(
-    descriptor: EnumDescriptor): Option[(Printer, EnumValueDescriptor) => Json] = {
+  def getEnumWriter(descriptor: EnumDescriptor): Option[(Printer, EnumValueDescriptor) => Json] = {
     enumFormatters.get(descriptor).map(_.writer)
   }
 
-  def getEnumParser(
-    descriptor: EnumDescriptor): Option[(Parser, Json) => EnumValueDescriptor] = {
+  def getEnumParser(descriptor: EnumDescriptor): Option[(Parser, Json) => EnumValueDescriptor] = {
     enumFormatters.get(descriptor).map(_.parser)
   }
 }
@@ -77,11 +71,7 @@ class Printer(
 
   private[this] def JField(key: String, value: Json) = (key, value)
 
-  private def serializeMessageField(
-    fd: FieldDescriptor,
-    name: String,
-    value: Any,
-    b: FieldBuilder): Unit = {
+  private def serializeMessageField(fd: FieldDescriptor, name: String, value: Any, b: FieldBuilder): Unit = {
     value match {
       case null =>
       // We are never printing empty optional messages to prevent infinite recursion.
@@ -109,10 +99,7 @@ class Printer(
               val value = if (valueDescriptor.protoType.isTypeMessage) {
                 toJson(x.getFieldByNumber(valueDescriptor.number).asInstanceOf[GeneratedMessage])
               } else {
-                serializeSingleValue(
-                  valueDescriptor,
-                  x.getField(valueDescriptor),
-                  formattingLongAsNumber)
+                serializeSingleValue(valueDescriptor, x.getField(valueDescriptor), formattingLongAsNumber)
               }
               key -> value
             }.toList: _*)
@@ -127,11 +114,7 @@ class Printer(
     }
   }
 
-  private def serializeNonMessageField(
-    fd: FieldDescriptor,
-    name: String,
-    value: PValue,
-    b: FieldBuilder) = {
+  private def serializeNonMessageField(fd: FieldDescriptor, name: String, value: PValue, b: FieldBuilder) = {
     value match {
       case PEmpty =>
         if (includingDefaultValueFields) {
@@ -164,7 +147,8 @@ class Printer(
         val descriptor = m.companion.scalaDescriptor
         b.sizeHint(descriptor.fields.size)
         descriptor.fields.foreach { f =>
-          val name = if (preservingProtoFieldNames) f.name else scalapb_json.ScalapbJsonCommon.jsonName(f)
+          val name =
+            if (preservingProtoFieldNames) f.name else scalapb_json.ScalapbJsonCommon.jsonName(f)
           if (f.protoType.isTypeMessage) {
             serializeMessageField(f, name, m.getFieldByNumber(f.number), b)
           } else {
@@ -175,30 +159,24 @@ class Printer(
     }
   }
 
-
   private def defaultJson(fd: FieldDescriptor): Json =
     serializeSingleValue(fd, scalapb_json.ScalapbJsonCommon.defaultValue(fd), formattingLongAsNumber)
 
   private def unsignedLong(n: Long) =
     if (n < 0) BigDecimal(BigInt(n & 0x7FFFFFFFFFFFFFFFL).setBit(63)) else BigDecimal(n)
 
-  private def formatLong(
-    n: Long,
-    protoType: FieldDescriptorProto.Type,
-    formattingLongAsNumber: Boolean): Json = {
+  private def formatLong(n: Long, protoType: FieldDescriptorProto.Type, formattingLongAsNumber: Boolean): Json = {
     val v =
       if (protoType.isTypeUint64 || protoType.isTypeFixed64) unsignedLong(n) else BigDecimal(n)
     if (formattingLongAsNumber) Json.fromBigDecimal(v) else Json.fromString(v.toString())
   }
 
-  def serializeSingleValue(
-    fd: FieldDescriptor,
-    value: PValue,
-    formattingLongAsNumber: Boolean): Json = value match {
+  def serializeSingleValue(fd: FieldDescriptor, value: PValue, formattingLongAsNumber: Boolean): Json = value match {
     case PEnum(e) =>
       formatRegistry.getEnumWriter(e.containingEnum) match {
         case Some(writer) => writer(this, e)
-        case None => if (formattingEnumsAsNumber) Json.fromLong(e.number) else Json.fromString(e.name)
+        case None =>
+          if (formattingEnumsAsNumber) Json.fromLong(e.number) else Json.fromString(e.name)
       }
     case PInt(v) if fd.protoType.isTypeUint32 => Json.fromLong(ScalapbJsonCommon.unsignedInt(v))
     case PInt(v) if fd.protoType.isTypeFixed32 => Json.fromLong(ScalapbJsonCommon.unsignedInt(v))
@@ -208,7 +186,8 @@ class Printer(
     case PFloat(v) => Json.fromFloatOrString(v)
     case PBoolean(v) => Json.fromBoolean(v)
     case PString(v) => Json.fromString(v)
-    case PByteString(v) => Json.fromString(java.util.Base64.getEncoder.encodeToString(v.toByteArray))
+    case PByteString(v) =>
+      Json.fromString(java.util.Base64.getEncoder.encodeToString(v.toByteArray))
     case _: PMessage | PRepeated(_) | PEmpty => throw new RuntimeException("Should not happen")
   }
 }
@@ -223,8 +202,7 @@ class Parser(
     fromJson(io.circe.parser.parse(str).fold(throw _, identity))
   }
 
-  def fromJson[A <: GeneratedMessage with Message[A]](value: Json)(
-    implicit cmp: GeneratedMessageCompanion[A]): A = {
+  def fromJson[A <: GeneratedMessage with Message[A]](value: Json)(implicit cmp: GeneratedMessageCompanion[A]): A = {
     cmp.messageReads.read(fromJsonToPMessage(cmp, value))
   }
 
@@ -300,8 +278,7 @@ class Parser(
         v.toInt.flatMap { i =>
           enumDescriptor.findValueByNumber(i)
         }.getOrElse(
-          throw new JsonFormatException(
-            s"Invalid enum value: ${v.toInt} for enum type: ${enumDescriptor.fullName}"))
+          throw new JsonFormatException(s"Invalid enum value: ${v.toInt} for enum type: ${enumDescriptor.fullName}"))
       case _ =>
         value.asString match {
           case Some(s) =>
@@ -309,8 +286,7 @@ class Parser(
               .find(_.name == s)
               .getOrElse(throw new JsonFormatException(s"Unrecognized enum value '${s}'"))
           case _ =>
-            throw new JsonFormatException(
-              s"Unexpected value ($value) for enum ${enumDescriptor.fullName}")
+            throw new JsonFormatException(s"Unexpected value ($value) for enum ${enumDescriptor.fullName}")
         }
     }
 
@@ -373,27 +349,17 @@ object JsonFormat {
     .registerMessageFormatter[wrappers.DoubleValue](
       primitiveWrapperWriter,
       primitiveWrapperParser[wrappers.DoubleValue])
-    .registerMessageFormatter[wrappers.FloatValue](
-      primitiveWrapperWriter,
-      primitiveWrapperParser[wrappers.FloatValue])
-    .registerMessageFormatter[wrappers.Int32Value](
-      primitiveWrapperWriter,
-      primitiveWrapperParser[wrappers.Int32Value])
-    .registerMessageFormatter[wrappers.Int64Value](
-      primitiveWrapperWriter,
-      primitiveWrapperParser[wrappers.Int64Value])
+    .registerMessageFormatter[wrappers.FloatValue](primitiveWrapperWriter, primitiveWrapperParser[wrappers.FloatValue])
+    .registerMessageFormatter[wrappers.Int32Value](primitiveWrapperWriter, primitiveWrapperParser[wrappers.Int32Value])
+    .registerMessageFormatter[wrappers.Int64Value](primitiveWrapperWriter, primitiveWrapperParser[wrappers.Int64Value])
     .registerMessageFormatter[wrappers.UInt32Value](
       primitiveWrapperWriter,
       primitiveWrapperParser[wrappers.UInt32Value])
     .registerMessageFormatter[wrappers.UInt64Value](
       primitiveWrapperWriter,
       primitiveWrapperParser[wrappers.UInt64Value])
-    .registerMessageFormatter[wrappers.BoolValue](
-      primitiveWrapperWriter,
-      primitiveWrapperParser[wrappers.BoolValue])
-    .registerMessageFormatter[wrappers.BytesValue](
-      primitiveWrapperWriter,
-      primitiveWrapperParser[wrappers.BytesValue])
+    .registerMessageFormatter[wrappers.BoolValue](primitiveWrapperWriter, primitiveWrapperParser[wrappers.BoolValue])
+    .registerMessageFormatter[wrappers.BytesValue](primitiveWrapperWriter, primitiveWrapperParser[wrappers.BytesValue])
     .registerMessageFormatter[wrappers.StringValue](
       primitiveWrapperWriter,
       primitiveWrapperParser[wrappers.StringValue])
@@ -407,12 +373,8 @@ object JsonFormat {
         }
       }
     )
-    .registerWriter[com.google.protobuf.struct.Value](
-      StructFormat.structValueWriter,
-      StructFormat.structValueParser)
-    .registerWriter[com.google.protobuf.struct.Struct](
-      StructFormat.structWriter,
-      StructFormat.structParser)
+    .registerWriter[com.google.protobuf.struct.Value](StructFormat.structValueWriter, StructFormat.structValueParser)
+    .registerWriter[com.google.protobuf.struct.Struct](StructFormat.structWriter, StructFormat.structParser)
     .registerWriter[com.google.protobuf.struct.ListValue](
       x => StructFormat.listValueWriter(x),
       StructFormat.listValueParser(_))
@@ -446,13 +408,11 @@ object JsonFormat {
 
   def toJson[A <: GeneratedMessage](m: A): Json = printer.toJson(m)
 
-  def fromJson[A <: GeneratedMessage with Message[A]: GeneratedMessageCompanion](
-    value: Json): A = {
+  def fromJson[A <: GeneratedMessage with Message[A]: GeneratedMessageCompanion](value: Json): A = {
     parser.fromJson(value)
   }
 
-  def fromJsonString[A <: GeneratedMessage with Message[A]: GeneratedMessageCompanion](
-    str: String): A = {
+  def fromJsonString[A <: GeneratedMessage with Message[A]: GeneratedMessageCompanion](str: String): A = {
     parser.fromJsonString(str)
   }
 
@@ -476,71 +436,72 @@ object JsonFormat {
     onError: => PValue
   ): PValue = {
     scalaType match {
-      case ScalaType.Int => value.fold(
-        jsonNull = onError,
-        jsonBoolean = _ => onError,
-        jsonNumber = {
-          _.toInt match {
-            case Some(i) => PInt(i)
-            case None => onError
-          }
-        },
-        jsonString = x =>
-          if (protoType.isTypeInt32 || protoType.isTypeSint32) {
-            parseInt32(x)
-          } else {
-            parseUint32(x)
-          }
-        ,
-        jsonArray = x => onError,
-        jsonObject = x => onError
-      )
-      case ScalaType.Long => value.fold(
-        jsonNull = onError,
-        jsonBoolean = _ => onError,
-        jsonNumber = {
-          _.toLong match {
-            case Some(i) => PLong(i)
-            case None => onError
-          }
-        }
-        ,
-        jsonString = x =>
-          if (protoType.isTypeInt64 || protoType.isTypeSint64) {
-            parseInt64(x)
-          } else {
-            parseUint64(x)
-          }
-        ,
-        jsonArray = x => onError,
-        jsonObject = x => onError
-      )
-      case ScalaType.Double => value.fold(
-        jsonNull = onError,
-        jsonBoolean = _ => onError,
-        jsonNumber = x => PDouble(x.toDouble),
-        jsonString = {
-          case "NaN" => PDouble(Double.NaN)
-          case "Infinity" => PDouble(Double.PositiveInfinity)
-          case "-Infinity" => PDouble(Double.NegativeInfinity)
-          case _ => onError
-        },
-        jsonArray = x => onError,
-        jsonObject = x => onError
-      )
-      case ScalaType.Float => value.fold(
-        jsonNull = onError,
-        jsonBoolean = _ => onError,
-        jsonNumber = x => PFloat(x.toDouble.toFloat),
-        jsonString = {
-          case "NaN" => PFloat(Float.NaN)
-          case "Infinity" => PFloat(Float.PositiveInfinity)
-          case "-Infinity" => PFloat(Float.NegativeInfinity)
-          case _ => onError
-        },
-        jsonArray = x => onError,
-        jsonObject = x => onError
-      )
+      case ScalaType.Int =>
+        value.fold(
+          jsonNull = onError,
+          jsonBoolean = _ => onError,
+          jsonNumber = {
+            _.toInt match {
+              case Some(i) => PInt(i)
+              case None => onError
+            }
+          },
+          jsonString = x =>
+            if (protoType.isTypeInt32 || protoType.isTypeSint32) {
+              parseInt32(x)
+            } else {
+              parseUint32(x)
+          },
+          jsonArray = x => onError,
+          jsonObject = x => onError
+        )
+      case ScalaType.Long =>
+        value.fold(
+          jsonNull = onError,
+          jsonBoolean = _ => onError,
+          jsonNumber = {
+            _.toLong match {
+              case Some(i) => PLong(i)
+              case None => onError
+            }
+          },
+          jsonString = x =>
+            if (protoType.isTypeInt64 || protoType.isTypeSint64) {
+              parseInt64(x)
+            } else {
+              parseUint64(x)
+          },
+          jsonArray = x => onError,
+          jsonObject = x => onError
+        )
+      case ScalaType.Double =>
+        value.fold(
+          jsonNull = onError,
+          jsonBoolean = _ => onError,
+          jsonNumber = x => PDouble(x.toDouble),
+          jsonString = {
+            case "NaN" => PDouble(Double.NaN)
+            case "Infinity" => PDouble(Double.PositiveInfinity)
+            case "-Infinity" => PDouble(Double.NegativeInfinity)
+            case _ => onError
+          },
+          jsonArray = x => onError,
+          jsonObject = x => onError
+        )
+      case ScalaType.Float =>
+        value.fold(
+          jsonNull = onError,
+          jsonBoolean = _ => onError,
+          jsonNumber = x => PFloat(x.toDouble.toFloat),
+          jsonString = {
+            case "NaN" => PFloat(Float.NaN)
+            case "Infinity" => PFloat(Float.PositiveInfinity)
+            case "-Infinity" => PFloat(Float.NegativeInfinity)
+            case _ => onError
+          },
+          jsonArray = x => onError,
+          jsonObject = x => onError
+        )
       case ScalaType.Boolean =>
         value.asBoolean match {
           case Some(i) => PBoolean(i)
